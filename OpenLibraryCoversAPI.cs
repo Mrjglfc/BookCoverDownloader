@@ -7,17 +7,26 @@ namespace BookCoverDownloader
         string? ol_covers_isbn_baseURL = config.GetValue<string>("OpenLibrary_Covers_ISBN_BaseURL");
         string? webServerURL = config.GetValue<string>("WebServerURL");
 
-        internal async Task ImageDownloader(string isbn, string coverURL, string authorName, string size)
+        internal async Task<bool> ImageDownloader(string isbn, string coverURL, string authorName, string size)
         {
-            using var client = new HttpClient();
+            Logger.Log(LogSection.OpenLibraryCoversAPI, $"Downloading cover from: {coverURL}");
+
+            using HttpClient client = new HttpClient();
             client.DefaultRequestHeaders.Add("User-Agent", config.GetValue<string>("CustomUserAgent"));
 
-            Logger.Log(LogSection.OpenLibraryCoversAPI, $"Downloading cover from: {coverURL}");
-            byte[] imageBytes = await client.GetByteArrayAsync(coverURL);
-
-            string coverPathOnDisk = GenerateWebServerCoverURL(isbn, authorName, size);
-            Logger.Log(LogSection.OpenLibraryCoversAPI, $"Saving cover to: {coverPathOnDisk}");
-            await File.WriteAllBytesAsync(coverPathOnDisk, imageBytes);
+            try
+            {
+                byte[] imageBytes = await client.GetByteArrayAsync($"{coverURL}?default=false");
+                string coverPathOnDisk = GenerateWebServerCoverURL(isbn, authorName, size);
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Saving cover to: {coverPathOnDisk}");
+                await File.WriteAllBytesAsync(coverPathOnDisk, imageBytes);
+                return true;
+            }
+            catch(HttpRequestException e)
+            {
+                Logger.Log(LogSection.OpenLibraryCoversAPI,  e.Message);
+                return false;
+            }
         }
 
         internal string[] GenerateCoverURL(ReadOnlySpan<char> isbn)
@@ -27,24 +36,27 @@ namespace BookCoverDownloader
 
         private string GenerateWebServerCoverURL(string isbn, string author, string size)
         {
-            if (webServerURL != null)
+            if (webServerURL == null) return string.Empty;
+            
+            if (!Directory.Exists($"{webServerURL}{author}"))
             {
-                if (!Directory.Exists($"{webServerURL}{author}"))
-                {
-                    Directory.CreateDirectory($"{webServerURL}{author}");
-                }
-
-                string coverFilePath = $"{webServerURL}{author}\\{isbn}";
-                if (size == "1")
-                {
-                    coverFilePath += "_sm";
-                }
-
-                coverFilePath += ".jpg";
-                return coverFilePath;
+                Directory.CreateDirectory($"{webServerURL}{author}");
             }
 
-            return string.Empty;
+            string coverFilePath = $"{webServerURL}{author}\\{isbn}";
+            if (size == "1")
+            {
+                coverFilePath += "_sm";
+            }
+
+            coverFilePath += ".jpg";
+            return coverFilePath;
+        }
+
+        internal bool CheckCoverExistsOnDisk(string isbn, string author, string size)
+        {
+            string fileDiskPath = GenerateWebServerCoverURL(isbn, author, size);
+            return File.Exists(fileDiskPath);
         }
     }
 }

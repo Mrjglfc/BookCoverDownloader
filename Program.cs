@@ -21,10 +21,12 @@ namespace BookCoverDownloader
             
             foreach (string isbn in isbns)
             {
-                Logger.Log(LogSection.Main, $"\nWorking with ISBN: {isbn}");
+                Console.WriteLine();
+                Logger.Log(LogSection.Main, $"Working with ISBN: {isbn}");
                 
                 if (!ISBNValidator.IsValidIsbn13(isbn))
                 {
+                    Logger.Log(LogSection.Main, $"ISBN [{isbn}] is not valid, skipping search...");
                     continue;
                 }
                 
@@ -35,6 +37,8 @@ namespace BookCoverDownloader
                     Logger.Log(LogSection.Main, "Error retrieving Book Details. Possible 404");
                     continue;
                 }
+
+                Logger.Log(LogSection.Main, $"Found book information for ISBN: {isbn} | Title: {book.title}");
 
                 string authorKey;
                 if (book.authors.Length == 0)
@@ -47,14 +51,40 @@ namespace BookCoverDownloader
                     authorKey = book.authors[0].key;
                 }
 
+                if (authorKey == string.Empty)
+                    continue;
+
                 AuthorDetails? author = await authorsApi.GetAuthorsDetails(authorKey);
 
-                if (author == null) continue;
+                if (author == null)
+                {
+                    Logger.Log(LogSection.Main, "Author was not found, unable to complete request, skipping search...");
+                    continue;
+                }
+
+                Logger.Log(LogSection.Main, $"Found Author information for ISBN: {isbn} | Name: {author.name}");
                 
                 string[] coverUrls = coversApi.GenerateCoverURL(isbn);
 
-                await coversApi.ImageDownloader(isbn, coverUrls[0], author.name, CoverSizing.SMALL);
-                await coversApi.ImageDownloader(isbn, coverUrls[1], author.name, CoverSizing.MEDIUM);
+                bool isSmallCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.SMALL);
+                bool isMediumCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.MEDIUM);
+
+                bool isSmallCoverDownloaded = true;
+                if (!isSmallCoverOnDisk)
+                {
+                    isSmallCoverDownloaded = await coversApi.ImageDownloader(isbn, coverUrls[0], author.name, CoverSizing.SMALL);
+                }
+                
+                bool isMediumCoverDownloaded = true;
+                if (!isMediumCoverOnDisk)
+                {
+                    isMediumCoverDownloaded = await coversApi.ImageDownloader(isbn, coverUrls[1], author.name, CoverSizing.MEDIUM);
+                }
+
+                if(isSmallCoverDownloaded && isMediumCoverDownloaded)
+                {
+                    databaseConnection.UpdateHasCover(isbn);
+                }
             }
         }
 
