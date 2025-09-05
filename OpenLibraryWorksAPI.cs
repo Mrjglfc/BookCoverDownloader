@@ -15,10 +15,20 @@ namespace BookCoverDownloader
 
             string url = $"{BASE_URL}{authorKey}.json";
             Logger.Log(LogSection.OpenLibraryWorksAPI, $"Getting Works Data from: {url}");
-            Stream jsonData = await client.GetStreamAsync(url);
 
-            WorkDetails authorStruct = await JsonSerializer.DeserializeAsync<WorkDetails>(jsonData);
-            return authorStruct.authors[0].author.key;
+            try
+            {
+                Stream jsonData = await client.GetStreamAsync(url);
+
+                WorkDetails? authorStruct = await JsonSerializer.DeserializeAsync<WorkDetails>(jsonData);
+                return authorStruct?.authors?[0].author.key;
+
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogSection.OpenLibraryWorksAPI, e.Message);
+                return string.Empty;
+            }
         }
     }
 }

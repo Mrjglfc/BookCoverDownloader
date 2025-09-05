@@ -10,7 +10,7 @@
 
     class AuthorsContainer
     {
-        public KeyContainer? author { get; set; }
-        public KeyContainer? type { get; set; }
+        public required KeyContainer author { get; set; }
+        public required KeyContainer type { get; set; }
     }
 }
