@@ -21,8 +21,13 @@ namespace BookCoverDownloader
                 Stream jsonData = await client.GetStreamAsync(url);
 
                 WorkDetails? authorStruct = await JsonSerializer.DeserializeAsync<WorkDetails>(jsonData);
-                return authorStruct?.authors?[0].author.key;
-
+                if (authorStruct != null && authorStruct.authors != null)
+                {
+                    AuthorsContainer container = authorStruct.authors[0];
+                    return container.author.key;
+                }
+                
+                return string.Empty;
             }
             catch (Exception e)
             {

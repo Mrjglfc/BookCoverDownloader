@@ -13,7 +13,7 @@ namespace BookCoverDownloader
             OpenLibraryDetailsAPI detailsApi = new(config);
             OpenLibraryWorksAPI worksApi = new(config);
             OpenLibraryAuthorsAPI authorsApi = new(config);
-            OpenLibraryCoversAPI coversApi = new(config);
+            OpenLibraryCoversApi coversApi = new(config);
             DatabaseConnection databaseConnection = new(config);
 
             Logger.Log(LogSection.Main,"Accessing Database");
@@ -34,7 +34,6 @@ namespace BookCoverDownloader
                 
                 if (book == null)
                 {
-                    Logger.Log(LogSection.Main, "Error retrieving Book Details. Possible 404");
                     continue;
                 }
 
@@ -64,7 +63,7 @@ namespace BookCoverDownloader
 
                 Logger.Log(LogSection.Main, $"Found Author information for ISBN: {isbn} | Name: {author.name}");
                 
-                string[] coverUrls = coversApi.GenerateCoverURL(isbn);
+                string[] coverUrls = coversApi.GenerateCoverUrl(isbn);
 
                 bool isSmallCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.SMALL);
                 bool isMediumCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.MEDIUM);
@@ -95,8 +94,7 @@ namespace BookCoverDownloader
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddUserSecrets<Program>();
 
-            IConfiguration config = builder.Build();
-            return config;
+            return builder.Build();
         }
     }
 }
