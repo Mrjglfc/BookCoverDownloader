@@ -2,7 +2,7 @@
 {
     public class CoverSizing
     {
-        public static string SMALL => "1";
-        public static string MEDIUM => "2";
+        public static string SMALL => "Small";
+        public static string MEDIUM => "Medium";
     }
 }

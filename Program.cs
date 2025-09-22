@@ -1,6 +1,6 @@
 ﻿using BookCoverDownloader.Enums;
-using BookCoverDownloader.Models;
 using Microsoft.Extensions.Configuration;
+using OpenLibraryNET;
 
 namespace BookCoverDownloader
 {
@@ -9,79 +9,62 @@ namespace BookCoverDownloader
         private static async Task Main()
         {
             IConfiguration config = BuildConfig();
-
-            OpenLibraryDetailsAPI detailsApi = new(config);
-            OpenLibraryWorksAPI worksApi = new(config);
-            OpenLibraryAuthorsAPI authorsApi = new(config);
-            OpenLibraryCoversAPI coversApi = new(config);
             DatabaseConnection databaseConnection = new(config);
+            OpenLibraryCoversApi coversAPI = new(config);
 
-            Logger.Log(LogSection.Main,"Accessing Database");
+            // use new OpenLibrary API
+            OpenLibraryClient client = new();
+            client.BackingClient.DefaultRequestHeaders.Add("User-Agent", config.GetValue<string>("CustomUserAgent"));
+
             List<string> isbns = databaseConnection.GetISBNListFromDB();
             
             foreach (string isbn in isbns)
             {
                 Console.WriteLine();
-                Logger.Log(LogSection.Main, $"Working with ISBN: {isbn}");
-                
-                if (!ISBNValidator.IsValidIsbn13(isbn))
+                Logger.Log(LogSection.Main, $"Getting OpenLibrary Edition: {isbn}");
+                OLEdition edition = await client.GetEditionAsync(isbn, OpenLibraryNET.Utility.BookIdType.ISBN);
+
+                if (edition == null || edition.Data == null)
                 {
-                    Logger.Log(LogSection.Main, $"ISBN [{isbn}] is not valid, skipping search...");
-                    continue;
-                }
-                
-                BookDetails? book = await detailsApi.GetBookDetails(isbn);
-                
-                if (book == null)
-                {
-                    Logger.Log(LogSection.Main, "Error retrieving Book Details. Possible 404");
+                    Logger.Log(LogSection.Main, $"No Edition Data found for ISBN: {isbn}");
                     continue;
                 }
 
-                Logger.Log(LogSection.Main, $"Found book information for ISBN: {isbn} | Title: {book.title}");
+                string authorName = edition.Data.AuthorKeys[0].Split("/")[^1].Replace("_", " ");
 
-                string authorKey;
-                if (book.authors.Length == 0)
+                if (authorName == null || authorName == string.Empty)
                 {
-                    Logger.Log(LogSection.Main, "Author field was not found in Book JSON Data. Trying backup from Works API");
-                    authorKey = await worksApi.GetWorksDetails(book.works[0].key);
+                    Logger.Log(LogSection.Main, $"Author name was not found in Edition Data: {isbn}");
+                    continue;
+                }
+
+                bool isSmallCoverOnDisk = coversAPI.CheckCoverExistsOnDisk(isbn, authorName, CoverSizing.SMALL);
+                bool isMediumCoverOnDisk = coversAPI.CheckCoverExistsOnDisk(isbn, authorName, CoverSizing.MEDIUM);
+
+                byte[] coverMedium = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, OpenLibraryNET.Utility.ImageSize.Medium);
+
+                bool isSmallCoverDownloaded;
+                if (!isSmallCoverOnDisk && coverMedium != null)
+                {
+                    isSmallCoverDownloaded = await coversAPI.SaveCoverToDisk(isbn, authorName, "1", coverMedium);
                 }
                 else
                 {
-                    authorKey = book.authors[0].key;
+                    isSmallCoverDownloaded = false;
                 }
 
-                if (authorKey == string.Empty)
-                    continue;
-
-                AuthorDetails? author = await authorsApi.GetAuthorsDetails(authorKey);
-
-                if (author == null)
+                byte[] coverLarge = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, OpenLibraryNET.Utility.ImageSize.Large);
+                bool isMediumCoverDownloaded;
+                if (!isMediumCoverOnDisk && coverLarge != null)
                 {
-                    Logger.Log(LogSection.Main, "Author was not found, unable to complete request, skipping search...");
-                    continue;
+                    isMediumCoverDownloaded = await coversAPI.SaveCoverToDisk(isbn, authorName, "2", coverLarge);
                 }
-
-                Logger.Log(LogSection.Main, $"Found Author information for ISBN: {isbn} | Name: {author.name}");
-                
-                string[] coverUrls = coversApi.GenerateCoverURL(isbn);
-
-                bool isSmallCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.SMALL);
-                bool isMediumCoverOnDisk = coversApi.CheckCoverExistsOnDisk(isbn, author.name, CoverSizing.MEDIUM);
-
-                bool isSmallCoverDownloaded = true;
-                if (!isSmallCoverOnDisk)
+                else
                 {
-                    isSmallCoverDownloaded = await coversApi.ImageDownloader(isbn, coverUrls[0], author.name, CoverSizing.SMALL);
-                }
-                
-                bool isMediumCoverDownloaded = true;
-                if (!isMediumCoverOnDisk)
-                {
-                    isMediumCoverDownloaded = await coversApi.ImageDownloader(isbn, coverUrls[1], author.name, CoverSizing.MEDIUM);
+                    isMediumCoverDownloaded = false;
                 }
 
-                if(isSmallCoverDownloaded && isMediumCoverDownloaded)
+                if (isSmallCoverDownloaded && isMediumCoverDownloaded)
                 {
                     databaseConnection.UpdateHasCover(isbn);
                 }
@@ -95,8 +78,7 @@ namespace BookCoverDownloader
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddUserSecrets<Program>();
 
-            IConfiguration config = builder.Build();
-            return config;
+            return builder.Build();
         }
     }
 }

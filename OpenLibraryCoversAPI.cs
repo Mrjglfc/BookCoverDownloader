@@ -1,50 +1,48 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using BookCoverDownloader.Enums;
+using Microsoft.Extensions.Configuration;
 
 namespace BookCoverDownloader
 {
-    internal class OpenLibraryCoversAPI(IConfiguration config)
+    internal class OpenLibraryCoversApi(IConfiguration config)
     {
-        string? ol_covers_isbn_baseURL = config.GetValue<string>("OpenLibrary_Covers_ISBN_BaseURL");
-        string? webServerURL = config.GetValue<string>("WebServerURL");
+        private readonly string? _olCoversIsbnBaseUrl = config.GetValue<string>("OpenLibrary_Covers_ISBN_BaseURL");
+        private readonly string? _webServerUrl = config.GetValue<string>("WebServerURL");
 
-        internal async Task<bool> ImageDownloader(string isbn, string coverURL, string authorName, string size)
+        internal async Task<bool> SaveCoverToDisk(string isbn, string authorName, string size, byte[] imageBytes)
         {
-            Logger.Log(LogSection.OpenLibraryCoversAPI, $"Downloading cover from: {coverURL}");
-
-            using HttpClient client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", config.GetValue<string>("CustomUserAgent"));
+            string coverPathOnDisk = GenerateWebServerCoverUrl(isbn, authorName, size);
 
             try
             {
-                byte[] imageBytes = await client.GetByteArrayAsync($"{coverURL}?default=false");
-                string coverPathOnDisk = GenerateWebServerCoverURL(isbn, authorName, size);
-                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Saving cover to: {coverPathOnDisk}");
                 await File.WriteAllBytesAsync(coverPathOnDisk, imageBytes);
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Saved cover to: {coverPathOnDisk}");
                 return true;
             }
-            catch(HttpRequestException e)
+            catch (OperationCanceledException e)
             {
-                Logger.Log(LogSection.OpenLibraryCoversAPI,  e.Message);
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"{size} Cover failed to save for ISBN: {isbn} | AuthorName: {authorName} | filePath: {coverPathOnDisk}");
+                Logger.Log(LogSection.OpenLibraryCoversAPI, e.Message);
                 return false;
             }
         }
 
-        internal string[] GenerateCoverURL(ReadOnlySpan<char> isbn)
+        internal string[] GenerateCoverUrl(ReadOnlySpan<char> isbn)
         {
-            return [$"{ol_covers_isbn_baseURL}{isbn}-M.jpg", $"{ol_covers_isbn_baseURL}{isbn}-L.jpg"];
+            return [$"{_olCoversIsbnBaseUrl}{isbn}-M.jpg", $"{_olCoversIsbnBaseUrl}{isbn}-L.jpg"];
         }
 
-        private string GenerateWebServerCoverURL(string isbn, string author, string size)
+        private string GenerateWebServerCoverUrl(string isbn, string author, string size)
         {
-            if (webServerURL == null) return string.Empty;
+            if (_webServerUrl == null) return string.Empty;
             
-            if (!Directory.Exists($"{webServerURL}{author}"))
+            if (!Directory.Exists($"{_webServerUrl}{author}"))
             {
-                Directory.CreateDirectory($"{webServerURL}{author}");
+                Directory.CreateDirectory($"{_webServerUrl}{author}");
+                // TODO: We should trigger a download of the Author Profile Picture here
             }
 
-            string coverFilePath = $"{webServerURL}{author}\\{isbn}";
-            if (size == "1")
+            string coverFilePath = $"{_webServerUrl}{author}\\{isbn}";
+            if (size == CoverSizing.SMALL)
             {
                 coverFilePath += "_sm";
             }
@@ -55,8 +53,18 @@ namespace BookCoverDownloader
 
         internal bool CheckCoverExistsOnDisk(string isbn, string author, string size)
         {
-            string fileDiskPath = GenerateWebServerCoverURL(isbn, author, size);
-            return File.Exists(fileDiskPath);
+            string fileDiskPath = GenerateWebServerCoverUrl(isbn, author, size);
+
+            if (File.Exists(fileDiskPath))
+            {
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Cover found on disk for ISBN: {isbn} | Author: {author}");
+                return true; 
+            }
+            else 
+            {
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Cover does not exist on disk for ISBN: {isbn} | Author: {author}");
+                return false; 
+            }
         }
     }
 }

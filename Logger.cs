@@ -10,10 +10,7 @@
 
     internal enum LogSection
     {
-        Main = 0,
-        OpenLibraryDetailsAPI,
-        OpenLibraryWorksAPI,
-        OpenLibraryAuthorsAPI,
+        Main,
         OpenLibraryCoversAPI,
         DatabaseConnection
     }
