@@ -11,7 +11,8 @@ namespace BookCoverDownloader
         public List<string> GetISBNListFromDB()
         {
             List<string> isbnList = [];
-            
+
+            Logger.Log(LogSection.Main, "Accessing Database");
             using SqlConnection connection = new(configuration.GetValue<string>("ConnectionString"));
             SqlCommand command = new(GetCoverISBNsQS, connection);
 
@@ -32,7 +33,7 @@ namespace BookCoverDownloader
             using SqlConnection connection = new(configuration.GetValue<string>("ConnectionString"));
             SqlCommand command = new($"{UpdateCoverISBNsQS}{isbn};", connection);
 
-            Logger.Log(LogSection.DatabaseConnection, $"Updating ISBN: {isbn} HasCover entry");
+            Logger.Log(LogSection.DatabaseConnection, $"Updating Database Entry for ISBN: {isbn}");
             command.Connection.Open();
             int rowsAffected = command.ExecuteNonQuery();
 
