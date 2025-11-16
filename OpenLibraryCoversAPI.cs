@@ -57,12 +57,12 @@ namespace BookCoverDownloader
 
             if (File.Exists(fileDiskPath))
             {
-                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Cover found on disk for ISBN: {isbn} | Author: {author}");
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"{size} Cover found on disk for ISBN: {isbn} | Author: {author}");
                 return true; 
             }
             else 
             {
-                Logger.Log(LogSection.OpenLibraryCoversAPI, $"Cover does not exist on disk for ISBN: {isbn} | Author: {author}");
+                Logger.Log(LogSection.OpenLibraryCoversAPI, $"{size} Cover does not exist on disk for ISBN: {isbn} | Author: {author}");
                 return false; 
             }
         }

@@ -1,6 +1,7 @@
 ﻿using BookCoverDownloader.Enums;
 using Microsoft.Extensions.Configuration;
 using OpenLibraryNET;
+using OpenLibraryNET.Utility;
 
 namespace BookCoverDownloader
 {
@@ -22,7 +23,8 @@ namespace BookCoverDownloader
             {
                 Console.WriteLine();
                 Logger.Log(LogSection.Main, $"Getting OpenLibrary Edition: {isbn}");
-                OLEdition edition = await client.GetEditionAsync(isbn, OpenLibraryNET.Utility.BookIdType.ISBN);
+
+                OLEdition edition = await ObtainEdition(client, isbn);
 
                 if (edition == null || edition.Data == null)
                 {
@@ -41,34 +43,59 @@ namespace BookCoverDownloader
                 bool isSmallCoverOnDisk = coversAPI.CheckCoverExistsOnDisk(isbn, authorName, CoverSizing.SMALL);
                 bool isMediumCoverOnDisk = coversAPI.CheckCoverExistsOnDisk(isbn, authorName, CoverSizing.MEDIUM);
 
-                byte[] coverMedium = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, OpenLibraryNET.Utility.ImageSize.Medium);
+                byte[] coverMedium = await DownloadCover(client, isbn, ImageSize.Medium);
+                byte[] coverLarge = await DownloadCover(client, isbn, ImageSize.Large);
 
-                bool isSmallCoverDownloaded;
-                if (!isSmallCoverOnDisk && coverMedium != null)
-                {
-                    isSmallCoverDownloaded = await coversAPI.SaveCoverToDisk(isbn, authorName, "1", coverMedium);
-                }
-                else
-                {
-                    isSmallCoverDownloaded = false;
-                }
-
-                byte[] coverLarge = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, OpenLibraryNET.Utility.ImageSize.Large);
-                bool isMediumCoverDownloaded;
-                if (!isMediumCoverOnDisk && coverLarge != null)
-                {
-                    isMediumCoverDownloaded = await coversAPI.SaveCoverToDisk(isbn, authorName, "2", coverLarge);
-                }
-                else
-                {
-                    isMediumCoverDownloaded = false;
-                }
+                bool isSmallCoverDownloaded = await SaveCoverToDisk(coversAPI, isbn, authorName, CoverSizing.SMALL, isSmallCoverOnDisk, coverMedium);
+                bool isMediumCoverDownloaded = await SaveCoverToDisk(coversAPI, isbn, authorName, CoverSizing.MEDIUM, isMediumCoverOnDisk, coverLarge);
 
                 if (isSmallCoverDownloaded && isMediumCoverDownloaded)
                 {
                     databaseConnection.UpdateHasCover(isbn);
                 }
             }
+        }
+
+        private static async Task<bool> SaveCoverToDisk(OpenLibraryCoversApi coversAPI, string isbn, string authorName, string size, bool isCoverOnDisk, byte[] coverData)
+        {
+            if (!isCoverOnDisk && coverData != null)
+            {
+                return await coversAPI.SaveCoverToDisk(isbn, authorName, size, coverData);
+            }
+
+            return isCoverOnDisk;
+        }
+
+        private static async Task<byte[]> DownloadCover(OpenLibraryClient client, string isbn, ImageSize size)
+        {
+            byte[] coverData;
+            try
+            {
+                coverData = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, size);
+            }
+            catch (HttpRequestException e)
+            {
+                Logger.Log(LogSection.Main, e.Message);
+                return [];
+            }
+
+            return coverData;
+        }
+
+        private static async Task<OLEdition> ObtainEdition(OpenLibraryClient client, string isbn)
+        {
+            OLEdition edition = new();
+            try
+            {
+                edition = await client.GetEditionAsync(isbn, OpenLibraryNET.Utility.BookIdType.ISBN);
+            }
+            catch (NullReferenceException e)
+            {
+                Logger.Log(LogSection.Main, e.Message);
+                return edition;
+            }
+
+            return edition;
         }
 
         private static IConfiguration BuildConfig()
