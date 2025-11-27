@@ -1,4 +1,5 @@
 ﻿using BookCoverDownloader.Enums;
+using BookCoverDownloader.Models;
 using Microsoft.Extensions.Configuration;
 using OpenLibraryNET;
 using OpenLibraryNET.Utility;
@@ -26,15 +27,18 @@ namespace BookCoverDownloader
 
                 OLEdition edition = await ObtainEdition(client, isbn);
 
-                if (edition == null || edition.Data == null)
+                if (edition.Data == null)
                 {
                     Logger.Log(LogSection.Main, $"No Edition Data found for ISBN: {isbn}");
                     continue;
                 }
 
-                string authorName = edition.Data.AuthorKeys[0].Split("/")[^1].Replace("_", " ");
+                string[] splitName = edition.Data.AuthorKeys[0].Split("/");
+                string authorName = splitName[^1].Replace("_", " ");
+                string authorOLID = splitName[^2].Replace("_", " ");
 
-                if (authorName == null || authorName == string.Empty)
+
+                if (authorName == string.Empty)
                 {
                     Logger.Log(LogSection.Main, $"Author name was not found in Edition Data: {isbn}");
                     continue;
@@ -53,17 +57,20 @@ namespace BookCoverDownloader
                 {
                     databaseConnection.UpdateHasCover(isbn);
                 }
+
+                string authorFilePath = coversAPI.GenerateAuthorImageURL(authorName);
+
+                if(!File.Exists(authorFilePath))
+                {
+                    byte[] authorImageBytes = await DownloadAuthorImage(client, authorOLID);
+                    await File.WriteAllBytesAsync(authorFilePath, authorImageBytes);
+                }
             }
         }
 
         private static async Task<bool> SaveCoverToDisk(OpenLibraryCoversApi coversAPI, string isbn, string authorName, string size, bool isCoverOnDisk, byte[] coverData)
         {
-            if (!isCoverOnDisk && coverData != null)
-            {
-                return await coversAPI.SaveCoverToDisk(isbn, authorName, size, coverData);
-            }
-
-            return isCoverOnDisk;
+            return !isCoverOnDisk ? await coversAPI.SaveCoverToDisk(isbn, authorName, size, coverData) : isCoverOnDisk;
         }
 
         private static async Task<byte[]> DownloadCover(OpenLibraryClient client, string isbn, ImageSize size)
@@ -71,7 +78,7 @@ namespace BookCoverDownloader
             byte[] coverData;
             try
             {
-                coverData = await client.Image.GetCoverAsync(OpenLibraryNET.Utility.CoverIdType.ISBN, isbn, size);
+                coverData = await client.Image.GetCoverAsync(CoverIdType.ISBN, isbn, size);
             }
             catch (HttpRequestException e)
             {
@@ -87,7 +94,7 @@ namespace BookCoverDownloader
             OLEdition edition = new();
             try
             {
-                edition = await client.GetEditionAsync(isbn, OpenLibraryNET.Utility.BookIdType.ISBN);
+                edition = await client.GetEditionAsync(isbn, BookIdType.ISBN);
             }
             catch (NullReferenceException e)
             {
@@ -97,6 +104,24 @@ namespace BookCoverDownloader
 
             return edition;
         }
+
+        private static async Task<byte[]> DownloadAuthorImage(OpenLibraryClient client, string authorOLID)
+        {
+            byte[] authorImageBytes;
+            try
+            {
+                authorImageBytes = await client.Image.GetAuthorPhotoAsync("olid", authorOLID, "M");
+            }
+            catch (HttpRequestException e)
+            {
+                Logger.Log(LogSection.Main, e.Message);
+                return [];
+            }
+
+            return authorImageBytes;
+        }
+
+
 
         private static IConfiguration BuildConfig()
         {

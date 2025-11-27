@@ -1,5 +1,6 @@
 ﻿using BookCoverDownloader.Enums;
 using Microsoft.Extensions.Configuration;
+using OpenLibraryNET;
 
 namespace BookCoverDownloader
 {
@@ -8,6 +9,14 @@ namespace BookCoverDownloader
         private readonly string? _olCoversIsbnBaseUrl = config.GetValue<string>("OpenLibrary_Covers_ISBN_BaseURL");
         private readonly string? _webServerUrl = config.GetValue<string>("WebServerURL");
 
+        /// <summary>
+        /// Saves the ISBN Edition Cover to Disk
+        /// </summary>
+        /// <param name="isbn"></param>
+        /// <param name="authorName"></param>
+        /// <param name="size"></param>
+        /// <param name="imageBytes"></param>
+        /// <returns></returns>
         internal async Task<bool> SaveCoverToDisk(string isbn, string authorName, string size, byte[] imageBytes)
         {
             string coverPathOnDisk = GenerateWebServerCoverUrl(isbn, authorName, size);
@@ -29,6 +38,11 @@ namespace BookCoverDownloader
         internal string[] GenerateCoverUrl(ReadOnlySpan<char> isbn)
         {
             return [$"{_olCoversIsbnBaseUrl}{isbn}-M.jpg", $"{_olCoversIsbnBaseUrl}{isbn}-L.jpg"];
+        }
+
+        internal string GenerateAuthorImageURL(string authorName)
+        {
+            return $"{_webServerUrl}{authorName}/{authorName}.jpg";
         }
 
         private string GenerateWebServerCoverUrl(string isbn, string author, string size)
