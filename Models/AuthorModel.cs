@@ -1,8 +1,8 @@
 ﻿namespace BookCoverDownloader.Models
 {
-    public class AuthorModel(string authorOLID, string authorName)
+    public class AuthorModel(string[] splitNames)
     {
-        public string OLID { get; set; } = authorOLID;
-        public string Name { get; set; } = authorName;
+        public string OLID { get; set; } = splitNames[^2].Replace("_", " ");
+        public string Name { get; set; } = splitNames[^1].Replace("_", " ");
     }
 }
